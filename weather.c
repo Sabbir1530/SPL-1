@@ -21,7 +21,7 @@ int main() {
         return 1;
     }
 
-    double x[100], y[100]; // Arrays to store x and y values
+    double x[100], y[100]; 
     int n = 0;
 
     while (fscanf(file, "%lf %lf", &x[n], &y[n]) == 2) {
