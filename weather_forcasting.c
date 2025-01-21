@@ -41,25 +41,25 @@ int loadData(const char *filename, WeatherData **data, int *dataCount) {
         }
 
         char *token = strtok(line, ",");
-        strcpy((*data)[index - 1].Date, token);  // Store Date
+        strcpy((*data)[index - 1].Date, token); 
 
         token = strtok(NULL, ",");
-        strcpy((*data)[index - 1].Season, token);  // Store Season
+        strcpy((*data)[index - 1].Season, token); 
 
         token = strtok(NULL, ",");
-        (*data)[index - 1].Temperature = atof(token);  // Store Temperature
+        (*data)[index - 1].Temperature = atof(token);  
 
         token = strtok(NULL, ",");
-        (*data)[index - 1].Humidity = atof(token);  // Store Humidity
+        (*data)[index - 1].Humidity = atof(token);
 
         token = strtok(NULL, ",");
-        (*data)[index - 1].Wind_Speed = atof(token);  // Store Wind Speed
+        (*data)[index - 1].Wind_Speed = atof(token); 
 
         token = strtok(NULL, ",");
-        (*data)[index - 1].Pressure = atof(token);  // Store Pressure
+        (*data)[index - 1].Pressure = atof(token);  
 
         token = strtok(NULL, ",");
-        (*data)[index - 1].Rain = (strcmp(token, "rain\n") == 0) ? 1 : 0;  // Store Rain (1 for rain, 0 for no rain)
+        (*data)[index - 1].Rain = (strcmp(token, "rain\n") == 0) ? 1 : 0; 
 
         index++;
     }
@@ -89,8 +89,8 @@ float predictRain(float humidity, float wind_speed, float pressure, float *coeff
         dotProduct += coefficients[i] * features[i];  // Compute the weighted sum
     }
 
-    float probability = 1 / (1 + exp(-dotProduct));  // Apply the sigmoid function
-    return (probability > 0.5) ? 1 : 0;  // Predict rain if probability > 0.5, else no rain
+    float probability = 1 / (1 + exp(-dotProduct));  
+    return (probability > 0.5) ? 1 : 0; 
 }
 
 // Function to perform linear regression for temperature prediction
