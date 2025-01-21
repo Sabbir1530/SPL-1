@@ -16,7 +16,7 @@ typedef struct {
 
 // Function to load dataset from file
 int loadData(const char *filename, WeatherData **data, int *dataCount) {
-    FILE *file = fopen("dataset.csv", "r");
+    FILE *file = fopen("processed_dataset.csv", "r");
     if (!file) {
         printf("Not opening file\n");
         return -1;
