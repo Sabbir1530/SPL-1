@@ -3,7 +3,6 @@
 #include <string.h>
 #include <math.h>
 
-// Define structure to hold weather dataset information
 typedef struct {
     char Date[20];
     char Season[10];
@@ -118,7 +117,7 @@ void splitDataset(WeatherData *data, int dataCount, WeatherData **trainSet, Weat
     }
 
     for (int i = *trainCount; i < dataCount; i++) {
-        (*testSet)[i - *trainCount] = data[i];  // Copy testing data
+        (*testSet)[i - *trainCount] = data[i];  
     }
 }
 
@@ -140,19 +139,19 @@ float evaluateModel(WeatherData *testSet, int testCount, float *coefficients) {
         float wind = testSet[i].Wind_Speed;
         float pres = testSet[i].Pressure;
 
-        float rainPrediction = predictRain(hum, wind, pres, coefficients);  // Predict rain
-        float tempPrediction = predictTemperature(hum, wind, pres, coefficients);  // Predict temperature
+        float rainPrediction = predictRain(hum, wind, pres, coefficients);  
+        float tempPrediction = predictTemperature(hum, wind, pres, coefficients);  
 
-        if ((int)rainPrediction == testSet[i].Rain) {  // Compare predicted rain with actual rain
+        if ((int)rainPrediction == testSet[i].Rain) {  
             correct++;
         }
 
-        if (fabs(tempPrediction - testSet[i].Temperature) < 1.0) {  // Compare predicted temperature with actual temperature
+        if (fabs(tempPrediction - testSet[i].Temperature) < 1.0) {  
             tempCorrect++;
         }
     }
 
-    printf("Rain Prediction Accuracy: %.2f%%\n", (float)correct / testCount * 100);  // Calculate rain accuracy
+    printf("Rain Prediction Accuracy: %.2f%%\n", (float)correct / testCount * 100); 
     return (float)correct / testCount;
 }
 
