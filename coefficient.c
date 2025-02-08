@@ -1,6 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// Function to transpose a matrix
+void matrix_transpose(double **result, double **mat, int rows, int cols) {
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            result[j][i] = mat[i][j];
+        }
+    }
+}
+
+// Function to multiply two matrices
 void matrix_multiply(double **result, double **mat1, double **mat2, int rows1, int cols1, int cols2) {
     for (int i = 0; i < rows1; i++) {
         for (int j = 0; j < cols2; j++) {
@@ -12,24 +22,56 @@ void matrix_multiply(double **result, double **mat1, double **mat2, int rows1, i
     }
 }
 
-void matrix_transpose(double **result, double **mat, int rows, int cols) {
-    for (int i = 0; i < rows; i++) {
-        for (int j = 0; j < cols; j++) {
-            result[j][i] = mat[i][j];
-        }
-    }
-}
-
+// Function to invert a 4x4 matrix using Gaussian elimination
 void matrix_inverse_4x4(double **result, double **mat) {
-       for (int i = 0; i < 4; i++) {
-        for (int j = 0; j < 4; j++) {
-            result[i][j] = (i == j) ? 1 : 0; 
+    int n = 4;
+    double temp;
+
+    // Create an augmented matrix with the identity matrix
+    double **augmented = (double **)malloc(n * sizeof(double *));
+    for (int i = 0; i < n; i++) {
+        augmented[i] = (double *)malloc(2 * n * sizeof(double));
+        for (int j = 0; j < n; j++) {
+            augmented[i][j] = mat[i][j];
+            augmented[i][j + n] = (i == j) ? 1 : 0;
         }
     }
+
+    // Perform Gaussian elimination
+    for (int i = 0; i < n; i++) {
+        // Make the diagonal contain all 1's
+        temp = augmented[i][i];
+        for (int j = 0; j < 2 * n; j++) {
+            augmented[i][j] /= temp;
+        }
+
+        // Make the other rows contain 0's
+        for (int j = 0; j < n; j++) {
+            if (i != j) {
+                temp = augmented[j][i];
+                for (int k = 0; k < 2 * n; k++) {
+                    augmented[j][k] -= augmented[i][k] * temp;
+                }
+            }
+        }
+    }
+
+    // Extract the inverse matrix
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            result[i][j] = augmented[i][j + n];
+        }
+    }
+
+    for (int i = 0; i < n; i++) {
+        free(augmented[i]);
+    }
+    free(augmented);
 }
 
+// Function to calculate the coefficients
 void calculate_coefficients(double **X, double *y, int n, double *coefficients) {
-    int m = 4; 
+    int m = 5;
 
     double **X_augmented = (double **)malloc(n * sizeof(double *));
     double **X_transpose = (double **)malloc(m * sizeof(double *));
@@ -85,23 +127,54 @@ void calculate_coefficients(double **X, double *y, int n, double *coefficients) 
 }
 
 int main() {
-    int n = 5; // Number of samples
-    double *X[] = {
-        (double[]){1.0, 2.0, 3.0},
-        (double[]){2.0, 3.0, 4.0},
-        (double[]){3.0, 4.0, 5.0},
-        (double[]){4.0, 5.0, 6.0},
-        (double[]){5.0, 6.0, 7.0}
-    };
-    double y[] = {1.0, 2.0, 3.0, 4.0, 5.0};
-    double coefficients[4];
+    FILE *file = fopen("processed_dataset.csv", "r");
+    if (!file) {
+        perror("Unable to open file");
+        return 1;
+    }
 
+    char line[256];
+    int n = 0;
+    while (fgets(line, sizeof(line), file)) {
+        n++;
+    }
+    n--; // Subtract header row
+
+    fseek(file, 0, SEEK_SET);
+    fgets(line, sizeof(line), file); // Skip header
+
+    double **X = (double **)malloc(n * sizeof(double *));
+    double *y = (double *)malloc(n * sizeof(double));
+
+    int i = 0;
+    while (fgets(line, sizeof(line), file)) {
+        X[i] = (double *)malloc(4 * sizeof(double));
+        char *token = strtok(line, ",");
+        token = strtok(NULL, ","); // Skip Date
+        token = strtok(NULL, ","); // Skip Season
+        y[i] = atof(strtok(NULL, ",")); // Temperature
+        X[i][0] = atof(strtok(NULL, ",")); // Humidity
+        X[i][1] = atof(strtok(NULL, ",")); // Wind_Speed
+        X[i][2] = atof(strtok(NULL, ",")); // Pressure
+        X[i][3] = atof(strtok(NULL, ",")); // Rain
+        i++;
+    }
+
+    fclose(file);
+
+    double coefficients[5];
     calculate_coefficients(X, y, n, coefficients);
 
     printf("Coefficients:\n");
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         printf("%f\n", coefficients[i]);
     }
+
+    for (int i = 0; i < n; i++) {
+        free(X[i]);
+    }
+    free(X);
+    free(y);
 
     return 0;
 }
