@@ -156,7 +156,7 @@ void calculate_coefficients(double **X, double *y, int n, double *coefficients)
 
 double *finalCoefficientCalc()
 {
-    FILE *file = fopen("processed_dataset.csv", "r");
+    FILE *file = fopen("Processed_Dataset.csv", "r");
     if (!file)
     {
         perror("Unable to open file");
@@ -198,12 +198,6 @@ double *finalCoefficientCalc()
     coefficients = (double *)malloc(sizeof(double) * 5);
     calculate_coefficients(X, y, n, coefficients);
 
-
-    // for (int i = 0; i < n; i++) {
-    //     free(X[i]);
-    // }
-    // free(X);
-    // free(y);
 
     double *data = (double*)malloc(sizeof(double)*3);
     data[0] = coefficients[1];
