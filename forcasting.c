@@ -18,7 +18,7 @@ typedef struct
 
 int loadData(const char *filename, WeatherData **data, int *dataCount)
 {
-    FILE *file = fopen("processed_dataset.csv", "r");
+    FILE *file = fopen("Processed_Dataset.csv", "r");
     if (!file)
     {
         printf("Error opening file\n");
@@ -171,7 +171,7 @@ float evaluateModel(WeatherData *testSet, int testCount, double *coefficients)
         }
     }
 
-    printf("Rain Prediction Accuracy: %.2f%%\n", (float)correct / testCount * 100);
+    //printf("Rain Prediction Accuracy: %.2f%%\n", (float)correct / testCount * 100);
     return (float)correct / testCount;
 }
 
@@ -183,8 +183,8 @@ void predictTemperatureAndSeason(const char *date, WeatherData *data, int dataCo
         if (strcmp(data[i].Date, date) == 0)
         {
             printf("Date: %s\n", data[i].Date);
-            printf("Predicted Temperature: %.2f\n", data[i].Temperature);
-            printf("Predicted Season: %s\n", data[i].Season);
+            printf("Temperature: %.2f\n", data[i].Temperature);
+            printf("Season: %s\n", data[i].Season);
             return;
         }
     }
@@ -196,7 +196,7 @@ int main()
     WeatherData *data;
     int dataCount;
 
-    if (loadData("dataset.csv", &data, &dataCount) != 0)
+    if (loadData("Processed_Dataset.csv", &data, &dataCount) != 0)
     {
         return -1;
     }
@@ -221,7 +221,7 @@ int main()
     // trainModel(trainSet, trainCount, coefficients);
 
     float accuracy = evaluateModel(testSet, testCount, coefficients);
-    printf("Model accuracy: %.2f%%\n", accuracy * 100);
+    //printf("Model accuracy: %.2f%%\n", accuracy * 100);
 
     // Predict temperature for a given condition
     srand(time(NULL));
@@ -238,7 +238,7 @@ int main()
     printf("\n");
 
     float rainPrediction = predictRain(humidity, wind_speed, pressure, coefficients);
-    printf("Prediction: %s\n", rainPrediction == 1 ? "Rain" : "No Rain");
+    printf("Prediction: %s\n", rainPrediction == 0 ? "Rain" : "No Rain");
 
     float predictedTemp = predictTemperature(humidity, wind_speed, pressure, coefficients);
     printf("Predicted Temperature: %.2f°C\n", predictedTemp);
