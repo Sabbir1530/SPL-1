@@ -200,7 +200,7 @@ double *finalCoefficientCalc()
 
 
     double *data = (double*)malloc(sizeof(double)*4);
-    data[0] = coefficients[0]/100;  //intercept
+    data[0] = coefficients[0];      //intercept
     data[1] = coefficients[1];      //humidity
     data[2] = coefficients[2];      //wind speed
     data[3] = coefficients[3]/1000; //pressure{hPa to kPa}
