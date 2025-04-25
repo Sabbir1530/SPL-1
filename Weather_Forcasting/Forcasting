@@ -133,14 +133,6 @@ void splitDataset(WeatherData *data, int dataCount, WeatherData **trainSet, Weat
     }
 }
 
-// Trin the model (manually Initialize)
-/*void trainModel(WeatherData *trainSet, int trainCount, double *coefficients)
-{
-    coefficients[0] = 0.5;  // humidity
-    coefficients[1] = 0.3;  // wind speed
-    coefficients[2] = -0.1; // pressure
-}*/
-
 // model accuracy
 float evaluateModel(WeatherData *testSet, int testCount, double *coefficients)
 {
