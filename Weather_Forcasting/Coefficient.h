@@ -1,6 +1,17 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
+
+// Structure to store feature normalization statistics
+typedef struct {
+    double hum_mean, hum_std;
+    double wind_mean, wind_std;
+    double pres_mean, pres_std;
+} NormStats;
+
+// Global normalization statistics
+extern NormStats temp_norm_stats;
 
 // Function to transpose a matrix
 void matrix_transpose(double **result, double **mat, int rows, int cols)
@@ -156,7 +167,7 @@ void calculate_coefficients(double **X, double *y, int n, double *coefficients)
 
 double *finalCoefficientCalc()
 {
-    FILE *file = fopen("Processed_Dataset.csv", "r");
+    FILE *file = fopen("Processed_Datase.csv", "r");
     if (!file)
     {
         perror("Unable to open file");
@@ -180,32 +191,188 @@ double *finalCoefficientCalc()
     int i = 0;
     while (fgets(line, sizeof(line), file))
     {
-        X[i] = (double *)malloc(4 * sizeof(double));
-        char *token = strtok(line, ",");
-        token = strtok(NULL, ",");         // Skip Date
-        token = strtok(NULL, ",");         // Skip Season
-        y[i] = atof(strtok(NULL, ","));    // Temperature
+        X[i] = (double *)malloc(3 * sizeof(double));  // Only 3 features: Humidity, Wind_Speed, Pressure
+        strtok(line, ",");                  // Skip Date
+        strtok(NULL, ",");                  // Skip Season
+        y[i] = atof(strtok(NULL, ","));     // Temperature (output for regression)
         X[i][0] = atof(strtok(NULL, ",")); // Humidity
         X[i][1] = atof(strtok(NULL, ",")); // Wind_Speed
-        X[i][2] = atof(strtok(NULL, ",")); // Pressure
-        X[i][3] = atof(strtok(NULL, ",")); // Rain
+        X[i][2] = atof(strtok(NULL, ",")); // Pressure (keep original scale)
+        strtok(NULL, ",");                  // Skip Rain (not used for temperature prediction)
         i++;
     }
 
     fclose(file);
 
-    double *coefficients;
-    coefficients = (double *)malloc(sizeof(double) * 5);
+    // Calculate feature statistics for normalization
+    double hum_mean = 0, wind_mean = 0, pres_mean = 0;
+    double hum_std = 0, wind_std = 0, pres_std = 0;
+    
+    for (int i = 0; i < n; i++)
+    {
+        hum_mean += X[i][0];
+        wind_mean += X[i][1];
+        pres_mean += X[i][2];
+    }
+    hum_mean /= n;
+    wind_mean /= n;
+    pres_mean /= n;
+    
+    // Calculate standard deviations
+    for (int i = 0; i < n; i++)
+    {
+        hum_std += (X[i][0] - hum_mean) * (X[i][0] - hum_mean);
+        wind_std += (X[i][1] - wind_mean) * (X[i][1] - wind_mean);
+        pres_std += (X[i][2] - pres_mean) * (X[i][2] - pres_mean);
+    }
+    hum_std = sqrt(hum_std / n);
+    wind_std = sqrt(wind_std / n);
+    pres_std = sqrt(pres_std / n);
+    
+    if (hum_std < 0.1) hum_std = 1.0;
+    if (wind_std < 0.1) wind_std = 1.0;
+    if (pres_std < 0.1) pres_std = 1.0;
+
+    // Normalize features for better regression
+    for (int i = 0; i < n; i++)
+    {
+        X[i][0] = (X[i][0] - hum_mean) / hum_std;    // Normalize humidity
+        X[i][1] = (X[i][1] - wind_mean) / wind_std;  // Normalize wind speed
+        X[i][2] = (X[i][2] - pres_mean) / pres_std;  // Normalize pressure
+    }
+
+    double *coefficients = (double *)malloc(sizeof(double) * 4);  // 4 coefficients: intercept + 3 features
     calculate_coefficients(X, y, n, coefficients);
 
+    // Store normalization statistics in global struct for use during prediction
+    temp_norm_stats.hum_mean = hum_mean;
+    temp_norm_stats.hum_std = hum_std;
+    temp_norm_stats.wind_mean = wind_mean;
+    temp_norm_stats.wind_std = wind_std;
+    temp_norm_stats.pres_mean = pres_mean;
+    temp_norm_stats.pres_std = pres_std;
 
-    double *data = (double*)malloc(sizeof(double)*4);
-    data[0] = coefficients[0];      //intercept
-    data[1] = coefficients[1];      //humidity
-    data[2] = coefficients[2];      //wind speed
-    data[3] = coefficients[3]/1000; //pressure{hPa to kPa}
+    // Free temporary arrays
+    for (int i = 0; i < n; i++)
+    {
+        free(X[i]);
+    }
+    free(X);
+    free(y);
 
-    // for(int i=0;i<5;i++) printf("%lf ", coefficients[i]);
-    // printf("\n");
-    return data;
+    return coefficients;  // Return all 4 coefficients directly
+}
+
+// Train a separate logistic regression model for rain prediction
+double *trainRainModel()
+{
+    FILE *file = fopen("Processed_Datase.csv", "r");
+    if (!file)
+    {
+        perror("Unable to open file");
+        exit(EXIT_FAILURE);
+    }
+
+    char line[256];
+    int n = 0;
+    while (fgets(line, sizeof(line), file))
+    {
+        n++;
+    }
+    n--; // Subtract header row
+
+    fseek(file, 0, SEEK_SET);
+    fgets(line, sizeof(line), file); // Skip header
+
+    double **X = (double **)malloc(n * sizeof(double *));
+    double *y = (double *)malloc(n * sizeof(double));
+
+    int i = 0;
+    while (fgets(line, sizeof(line), file))
+    {
+        X[i] = (double *)malloc(3 * sizeof(double));
+        strtok(line, ",");                  // Skip Date
+        strtok(NULL, ",");                  // Skip Season
+        strtok(NULL, ",");                  // Skip Temperature
+        X[i][0] = atof(strtok(NULL, ",")); // Humidity
+        X[i][1] = atof(strtok(NULL, ",")); // Wind_Speed
+        X[i][2] = atof(strtok(NULL, ",")); // Pressure
+        y[i] = atof(strtok(NULL, ","));    // Rain (output for logistic regression)
+        i++;
+    }
+
+    fclose(file);
+
+    // Calculate means and standard deviations for feature normalization
+    double hum_mean = 0, wind_mean = 0, pres_mean = 0;
+    double hum_std = 0, wind_std = 0, pres_std = 0;
+    
+    for (int i = 0; i < n; i++)
+    {
+        hum_mean += X[i][0];
+        wind_mean += X[i][1];
+        pres_mean += X[i][2];
+    }
+    hum_mean /= n;
+    wind_mean /= n;
+    pres_mean /= n;
+    
+    for (int i = 0; i < n; i++)
+    {
+        hum_std += (X[i][0] - hum_mean) * (X[i][0] - hum_mean);
+        wind_std += (X[i][1] - wind_mean) * (X[i][1] - wind_mean);
+        pres_std += (X[i][2] - pres_mean) * (X[i][2] - pres_mean);
+    }
+    hum_std = sqrt(hum_std / n);
+    wind_std = sqrt(wind_std / n);
+    pres_std = sqrt(pres_std / n);
+    
+    if (hum_std < 0.01) hum_std = 1.0;
+    if (wind_std < 0.01) wind_std = 1.0;
+    if (pres_std < 0.01) pres_std = 1.0;
+
+    // Calculate rain probability statistics
+    double rain_mean = 0;
+    for (int i = 0; i < n; i++)
+    {
+        rain_mean += y[i];
+    }
+    rain_mean /= n;
+    
+    // Calculate correlation coefficients between features and rain outcome
+    double cov_hum = 0, cov_wind = 0, cov_pres = 0;
+    for (int i = 0; i < n; i++)
+    {
+        cov_hum += ((X[i][0] - hum_mean) / hum_std) * (y[i] - rain_mean);
+        cov_wind += ((X[i][1] - wind_mean) / wind_std) * (y[i] - rain_mean);
+        cov_pres += ((X[i][2] - pres_mean) / pres_std) * (y[i] - rain_mean);
+    }
+    cov_hum /= n;
+    cov_wind /= n;
+    cov_pres /= n;
+    
+    // Convert probability to log-odds for intercept
+    double rain_prob = rain_mean;
+    if (rain_prob < 0.01) rain_prob = 0.01;
+    if (rain_prob > 0.99) rain_prob = 0.99;
+    double intercept = log(rain_prob / (1 - rain_prob));
+    
+    // Scale coefficients appropriately for logistic regression
+    double scale = 0.5;  // Reduced scale to balance predictions
+    
+    double *rain_coefficients = (double *)malloc(sizeof(double) * 4);
+    rain_coefficients[0] = intercept;
+    rain_coefficients[1] = cov_hum * scale;
+    rain_coefficients[2] = cov_wind * scale;
+    rain_coefficients[3] = cov_pres * scale;
+
+    // Free temporary arrays
+    for (int i = 0; i < n; i++)
+    {
+        free(X[i]);
+    }
+    free(X);
+    free(y);
+
+    return rain_coefficients;
 }
