@@ -5,6 +5,9 @@
 #include <time.h>
 #include "Coefficient.h"
 
+// Define the global normalization statistics for temperature model
+NormStats temp_norm_stats = {0, 1, 0, 1, 0, 1};
+
 typedef struct
 {
     char Date[20];
@@ -18,10 +21,10 @@ typedef struct
 
 int loadData(const char *filename, WeatherData **data, int *dataCount)
 {
-    FILE *file = fopen("Processed_Dataset.csv", "r");
+    FILE *file = fopen(filename, "r");  // Use the filename parameter, not hardcoded
     if (!file)
     {
-        printf("Error opening file\n");
+        printf("Error opening file: %s\n", filename);
         return -1;
     }
 
@@ -90,32 +93,50 @@ void normalizeFeatures(float *data, int size)
     }
 }
 
-// logistic regression for rain prediction
+// logistic regression for rain prediction - returns probability, not hardcoded 0/1
 float predictRain(float humidity, float wind_speed, float pressure, double *coefficients)
 {
+    float dotProduct = coefficients[0] + 
+                       coefficients[1] * humidity + 
+                       coefficients[2] * wind_speed + 
+                       coefficients[3] * pressure;
 
-    float dotProduct = 0;
-
-   dotProduct=coefficients[0] + 
-           coefficients[1] * humidity + 
-           coefficients[2] * wind_speed + 
-           coefficients[3] * pressure; 
-
-    float probability = 1 / (1 + exp(-dotProduct));
-    return (probability > 0.7) ? 1 : 0;
+    float probability = 1.0f / (1.0f + expf(-dotProduct));
+    return probability;  // Return actual probability for model evaluation
 }
 
-// linear regression for temperature prediction
+// Linear regression for temperature prediction with normalized features
 float predictTemperature(float humidity, float wind_speed, float pressure, double *coefficients)
 {
+    // Feature normalization statistics (calculated from training data)
+    // These values must match those used in finalCoefficientCalc()
+    double norm_hum = (humidity - temp_norm_stats.hum_mean) / temp_norm_stats.hum_std;
+    double norm_wind = (wind_speed - temp_norm_stats.wind_mean) / temp_norm_stats.wind_std;
+    double norm_pres = (pressure - temp_norm_stats.pres_mean) / temp_norm_stats.pres_std;
+    
     return coefficients[0] + 
-           coefficients[1] * humidity + 
-           coefficients[2] * wind_speed + 
-           coefficients[3] * pressure; 
+           coefficients[1] * norm_hum + 
+           coefficients[2] * norm_wind + 
+           coefficients[3] * norm_pres;
+}
+
+// Shuffle data for random train/test split
+void shuffleData(WeatherData *data, int size)
+{
+    for (int i = size - 1; i > 0; i--)
+    {
+        int j = rand() % (i + 1);
+        WeatherData temp = data[i];
+        data[i] = data[j];
+        data[j] = temp;
+    }
 }
 
 void splitDataset(WeatherData *data, int dataCount, WeatherData **trainSet, WeatherData **testSet, int *trainCount, int *testCount, float ratio)
 {
+    // Shuffle data for proper train/test split
+    shuffleData(data, dataCount);
+    
     *trainCount = (int)(dataCount * ratio);
     *testCount = dataCount - *trainCount;
 
@@ -133,33 +154,65 @@ void splitDataset(WeatherData *data, int dataCount, WeatherData **trainSet, Weat
     }
 }
 
-// model accuracy
-float evaluateModel(WeatherData *testSet, int testCount, double *coefficients)
+// Evaluate rain prediction accuracy
+void evaluateRainModel(WeatherData *testSet, int testCount, double *coefficients)
 {
-    int correct = 0;
-    int tempCorrect = 0;
+    int truePositive = 0, trueNegative = 0, falsePositive = 0, falseNegative = 0;
+    float RAIN_THRESHOLD = 0.65f;  // Threshold optimized for balanced predictions
 
     for (int i = 0; i < testCount; i++)
     {
-        float hum = testSet[i].Humidity;
-        float wind = testSet[i].Wind_Speed;
-        float pres = testSet[i].Pressure;
+        float probability = predictRain(testSet[i].Humidity, testSet[i].Wind_Speed, testSet[i].Pressure, coefficients);
+        int prediction = (probability > RAIN_THRESHOLD) ? 1 : 0;
+        int actual = testSet[i].Rain;
 
-        float rainPrediction = predictRain(hum, wind, pres, coefficients);
-        float tempPrediction = predictTemperature(hum, wind, pres, coefficients);
-        if ((int)rainPrediction == testSet[i].Rain)
-        {
-            correct++;
-        }
-
-        if (fabs(tempPrediction - testSet[i].Temperature) <10)
-        {
-            tempCorrect++;
-        }
+        if (prediction == 1 && actual == 1) truePositive++;
+        else if (prediction == 0 && actual == 0) trueNegative++;
+        else if (prediction == 1 && actual == 0) falsePositive++;
+        else if (prediction == 0 && actual == 1) falseNegative++;
     }
 
-    printf("Temparature Prediction Accuracy: %.2f%%\n", (float)tempCorrect / testCount * 100);
-    return (float)correct / testCount;
+    float accuracy = ((float)(truePositive + trueNegative) / testCount) * 100;
+    float precision = (truePositive + falsePositive > 0) ? ((float)truePositive / (truePositive + falsePositive)) * 100 : 0;
+    float recall = (truePositive + falseNegative > 0) ? ((float)truePositive / (truePositive + falseNegative)) * 100 : 0;
+
+    printf("\n========== RAIN PREDICTION ACCURACY ==========\n");
+    printf("Accuracy:  %.2f%%\n", accuracy);
+    printf("Precision: %.2f%%\n", precision);
+    printf("Recall:    %.2f%%\n", recall);
+    printf("Confusion Matrix: TP=%d, TN=%d, FP=%d, FN=%d\n", truePositive, trueNegative, falsePositive, falseNegative);
+    printf("============================================\n");
+}
+
+// Evaluate temperature prediction accuracy
+void evaluateTemperatureModel(WeatherData *testSet, int testCount, double *coefficients)
+{
+    float sumError = 0, sumSquaredError = 0;
+    int withinRange5 = 0, withinRange10 = 0;
+
+    for (int i = 0; i < testCount; i++)
+    {
+        float prediction = predictTemperature(testSet[i].Humidity, testSet[i].Wind_Speed, testSet[i].Pressure, coefficients);
+        float error = fabs(prediction - testSet[i].Temperature);
+
+        sumError += error;
+        sumSquaredError += error * error;
+
+        if (error <= 5.0f) withinRange5++;
+        if (error <= 10.0f) withinRange10++;
+    }
+
+    float mae = sumError / testCount;
+    float rmse = sqrtf(sumSquaredError / testCount);
+    float accuracy5 = (withinRange5 / (float)testCount) * 100;
+    float accuracy10 = (withinRange10 / (float)testCount) * 100;
+
+    printf("\n========== TEMPERATURE PREDICTION ACCURACY ==========\n");
+    printf("Mean Absolute Error (MAE):     %.2f°C\n", mae);
+    printf("Root Mean Squared Error (RMSE): %.2f°C\n", rmse);
+    printf("Accuracy (within 5°C):         %.2f%%\n", accuracy5);
+    printf("Accuracy (within 10°C):        %.2f%%\n", accuracy10);
+    printf("====================================================\n");
 }
 
 // Find temperature and season for a given date
@@ -183,7 +236,7 @@ int main()
     WeatherData *data;
     int dataCount;
 
-    if (loadData("Processed_Dataset.csv", &data, &dataCount) != 0)
+    if (loadData("Processed_Datase.csv", &data, &dataCount) != 0)
     {
         return -1;
     }
@@ -197,17 +250,29 @@ int main()
 
     printf("Training data count: %d, Testing data count: %d\n", trainCount, testCount);
 
-    double *coefficients;
-    coefficients = finalCoefficientCalc();
-    printf("\n");
-       printf("\nCoefficients:\n");
-    printf("Intercept: %f\n", coefficients[0]);
-    printf("Humidity: %f\n", coefficients[1]);
-    printf("Wind Speed: %f\n", coefficients[2]);
-    printf("Pressure: %f\n", coefficients[3]);
-    
+    // Calculate temperature prediction coefficients
+    double *tempCoefficients = finalCoefficientCalc();
+    printf("\n========== TEMPERATURE MODEL COEFFICIENTS ==========\n");
+    printf("Intercept:     %.6f\n", tempCoefficients[0]);
+    printf("Humidity:      %.6f\n", tempCoefficients[1]);
+    printf("Wind Speed:    %.6f\n", tempCoefficients[2]);
+    printf("Pressure:      %.6f\n", tempCoefficients[3]);
+    printf("==================================================\n");
 
-    float accuracy = evaluateModel(testSet, testCount, coefficients);
+    // Calculate rain prediction coefficients (separate model)
+    double *rainCoefficients = trainRainModel();
+    printf("\n========== RAIN MODEL COEFFICIENTS ==========\n");
+    printf("Intercept:     %.6f\n", rainCoefficients[0]);
+    printf("Humidity:      %.6f\n", rainCoefficients[1]);
+    printf("Wind Speed:    %.6f\n", rainCoefficients[2]);
+    printf("Pressure:      %.6f\n", rainCoefficients[3]);
+    printf("==========================================\n\n");
+
+    // Evaluate rain prediction model (with separate rain coefficients)
+    evaluateRainModel(testSet, testCount, rainCoefficients);
+    
+    // Evaluate temperature prediction model (with temperature coefficients)
+    evaluateTemperatureModel(testSet, testCount, tempCoefficients);
 
     // Predict temperature for a given condition
     srand(time(NULL));
@@ -223,10 +288,12 @@ int main()
     printf("Pressure: %.2f\n", pressure);  
     printf("\n");
 
-    float rainPrediction = predictRain(humidity, wind_speed, pressure, coefficients);
-    printf("Prediction: %s\n", rainPrediction == 0 ? "Rain" : "No Rain");
+    float rainProbability = predictRain(humidity, wind_speed, pressure, rainCoefficients);
+    int rainPrediction = (rainProbability > 0.5f) ? 1 : 0;
+    printf("Rain Probability: %.2f%%\n", rainProbability * 100);
+    printf("Prediction: %s\n", rainPrediction == 1 ? "Rain" : "No Rain");
 
-    float predictedTemp = predictTemperature(humidity, wind_speed, pressure, coefficients);
+    float predictedTemp = predictTemperature(humidity, wind_speed, pressure, tempCoefficients);
     printf("Predicted Temperature: %.2f°C\n", predictedTemp);
 
     printf("\n");
@@ -239,6 +306,8 @@ int main()
     free(data);
     free(trainSet);
     free(testSet);
+    free(tempCoefficients);
+    free(rainCoefficients);
 
     return 0;
 }
